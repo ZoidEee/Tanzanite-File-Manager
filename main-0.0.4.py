@@ -4,12 +4,12 @@ import sys
 import time
 
 from PyQt6.QtCore import QDir, QSize, pyqtSignal, Qt, QFileInfo, QFile, QMimeData, \
-    QItemSelectionModel, QPoint, QUrl
+    QItemSelectionModel, QPoint, QUrl, QStorageInfo
 from PyQt6.QtGui import QFileSystemModel, QIcon, QPixmap, QAction, QCursor, QGuiApplication, QFontDatabase, \
     QFont, QFontMetrics, QDesktopServices, QStandardItemModel, QStandardItem
 from PyQt6.QtWidgets import QMainWindow, QApplication, QListView, QHBoxLayout, QWidget, QLabel, QVBoxLayout, QFrame, \
     QToolBar, QScrollArea, QSizePolicy, QMenu, QLineEdit, QInputDialog, QMessageBox, QPushButton, QDialog, \
-    QAbstractItemView, QDialogButtonBox
+    QAbstractItemView, QDialogButtonBox, QGridLayout
 
 style_sheet = """
 QFrame#sbFrame{
@@ -71,6 +71,159 @@ class AddressBarLabel(QLabel):
         if ev.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.text())
 
+
+class PropertiesWindow(QDialog):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.labels = [
+            "Name",
+            "Type",
+            "Contents",
+            "Parent folder",
+            "Modified",
+            "Created On",
+            "Free Space",
+        ]
+        self.initializeUI()
+
+    def initializeUI(self):
+        self.setWindowTitle("Properties")
+        self.setFixedSize(400, 450)
+        self.setupPropertiesWindow()
+
+    def setupPropertiesWindow(self):
+        # Toolbar
+        # Tabs
+        # Layout
+        self.prop_layout_core = QVBoxLayout()
+        self.prop_upper_layout = QHBoxLayout()
+        self.prop_upper_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.prop_bottom_layout = QGridLayout()
+        self.prop_bottom_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.prop_icon_btn = QPushButton()
+        self.itemCheck()
+        self.prop_icon_btn.setFixedSize(85, 85)
+        self.prop_upper_layout.addWidget(self.prop_icon_btn)
+
+        for i, label in enumerate(self.labels):
+            prop_label = QLabel(label)
+            prop_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            prop_label.setFrameShape(QFrame.Shape.Box)
+            prop_label.setStyleSheet("padding: 0,0,10px,0;")
+            prop_label.setFixedSize(125, 35)
+            self.prop_bottom_layout.addWidget(prop_label, i, 0)
+
+        self.prop_name_le = QLineEdit()
+        self.prop_name_le.setFixedSize(250, 25)
+        file_info = QFileInfo(self.path)
+
+        if QDir(self.path).exists():
+            file_type = "Folder"
+        elif QFile(self.path).exists():
+            file_ext = file_info.suffix()
+            file_type_map = {
+                "pdf": "PDF document",
+                "txt": "Text document",
+                "docx": "Microsoft Word document",
+            }
+            file_type = file_type_map.get(file_ext, "Unknown file type")
+        self.prop_type_data = QLabel(file_type)
+
+        self.prop_type_data.setFixedSize(250, 35)
+        self.prop_type_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.prop_contents_data = QLabel()
+        self.direcContents()
+        self.prop_contents_data.setText(f"{self.num_files} items, totalling {self.total_size_str}")
+        self.prop_contents_data.setFixedSize(250, 35)
+        self.prop_contents_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.prop_parent_data = QLabel(file_info.dir().path())
+        self.prop_parent_data.setFixedSize(250, 35)
+        self.prop_parent_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        modified_on = file_info.lastModified().toString("yyyy-MM-dd HH:mm:ss")
+        self.prop_modified_data = QLabel(modified_on)
+        self.prop_modified_data.setFixedSize(250, 35)
+        self.prop_modified_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        created_on = file_info.birthTime().toString("yyyy-MM-dd HH:mm:ss")
+        self.prop_created_data = QLabel(created_on)
+        self.prop_created_data.setFixedSize(250, 35)
+        self.prop_created_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        storage = QStorageInfo.root()
+        data = storage.bytesAvailable() / (1000 * 1000 * 1000)
+        free_space = "{:.5f}".format(data)
+        self.prop_free_data = QLabel(free_space[:5] + " GB")
+        self.prop_free_data.setFixedSize(250, 35)
+        self.prop_free_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.prop_bottom_layout.addWidget(self.prop_name_le, 0, 1)
+        self.prop_bottom_layout.addWidget(self.prop_type_data, 1, 1)
+        self.prop_bottom_layout.addWidget(self.prop_contents_data, 2, 1)
+        self.prop_bottom_layout.addWidget(self.prop_parent_data, 3, 1)
+        self.prop_bottom_layout.addWidget(self.prop_modified_data, 4, 1)
+        self.prop_bottom_layout.addWidget(self.prop_created_data, 5, 1)
+        self.prop_bottom_layout.addWidget(self.prop_free_data, 6, 1)
+
+        self.prop_layout_core.addLayout(self.prop_upper_layout)
+        self.prop_layout_core.addLayout(self.prop_bottom_layout)
+        self.setLayout(self.prop_layout_core)
+        self.prop_name_le.setText(file_info.fileName())
+
+    def itemCheck(self):
+        if QDir(self.path).exists():
+            pixmap = QPixmap("icons/folder.png")
+            prop_icon = QIcon(pixmap)
+            self.prop_icon_btn.setIconSize(QSize(75, 75))
+            self.prop_icon_btn.setIcon(prop_icon)
+        elif QFile(self.path).exists():
+            pixmap = QPixmap("icons/file.png")
+            prop_icon = QIcon(pixmap)
+            self.prop_icon_btn.setIconSize(QSize(75, 75))
+            self.prop_icon_btn.setIcon(prop_icon)
+
+    def direcContents(self):
+        # Create a QDir object for the directory
+        direc = QDir(self.path)
+
+        # Get the list of items in the directory
+        items = direc.entryInfoList()
+
+        # Initialize counters for the number of files and the total size
+        self.num_files = 0
+        total_size = 0
+
+        # Loop over the items in the directory
+        for item in items:
+            # Check if the item is a file
+            if item.isFile():
+                # Increment the file counter
+                self.num_files += 1
+                # Add the size of the file to the total size
+                total_size += item.size()
+
+        # Convert the total size to MB, KB, or GB
+        if total_size >= 1024 * 1024 * 1024:
+            self.total_size_str = "{:.2f} GB".format(total_size / (1024 * 1024 * 1024))
+        elif total_size >= 1024 * 1024:
+            self.total_size_str = "{:.2f} MB".format(total_size / (1024 * 1024))
+        elif total_size >= 1024:
+            self.total_size_str = "{:.2f} KB".format(total_size / 1024)
+        else:
+            self.total_size_str = "{} bytes".format(total_size)
+
+    def closeEvent(self, event):
+        new_name = self.prop_name_le.text()
+        if new_name != QFileInfo(self.path).fileName():
+            new_path = QFileInfo(self.path).dir().filePath(new_name)
+            if QFile(self.path).exists():
+                QFile(self.path).rename(new_path)
+            elif QDir(self.path).exists():
+                QDir(self.path).rename(self.path, new_path)
+        event.accept()
 
 
 class SearchWindow(QDialog):
@@ -147,6 +300,8 @@ class SearchWindow(QDialog):
             elif os.path.isdir(path):
                 self.parent().loadDirectory(path)
             self.accept()
+
+
 class AddressBar(QFrame):
     directoryClicked = pyqtSignal(str)  # New signal
 
@@ -265,7 +420,7 @@ class AddressBar(QFrame):
         if clicked_directory_path is not None:
             self.directoryClicked.emit("/" + clicked_directory_path)
 
-    def showContextMenu(self, pos, index):  # Do I need pos? ---- Create a QMenu object and add actions to it
+    def showContextMenu(self, pos, index):
         menu = self.menu
         menu.addAction(self.new_folder_act)
         menu.addAction(self.open_new_tab_act)
@@ -519,7 +674,6 @@ class TanzFileManger(QMainWindow):
         self.prop_dir_act = QAction("Properties")  # No work done
         self.prop_dir_act.triggered.connect(self.showProperties)
 
-
         self.copy_dir_act = QAction("Copy")
         self.copy_dir_act.triggered.connect(self.copy)
 
@@ -571,11 +725,8 @@ class TanzFileManger(QMainWindow):
             menu.addSeparator()
             menu.addAction(self.prop_dir_act)
             menu.exec(QCursor.pos())
-
-
         else:
             menu = QMenu()
-
             menu.addAction(self.new_dir_act)
             menu.addAction(self.bookmark_dir_act)
             menu.addSeparator()
@@ -616,23 +767,21 @@ class TanzFileManger(QMainWindow):
                 sep = QLabel("/")
                 self.addrBar_h_box.addWidget(sep)
 
-    def loadDirectory(self, directory_path=None):
-        if directory_path is None:
-            curr_index = self.core_list_view.currentIndex()
-            curr_direc = self.core_sys_model.filePath(curr_index)
-        else:
-            curr_direc = directory_path
-            print(curr_direc)
-        if os.path.isdir(curr_direc):
+    def loadDirectory(self):
+
+        curr_index = self.core_list_view.currentIndex()
+        curr_direc = self.core_sys_model.filePath(curr_index)
+
+        if QDir(curr_direc).exists():
             self.core_list_view.setRootIndex(self.core_sys_model.index(curr_direc))
             self.core_sys_model.setRootPath(curr_direc)
             self.visited_directory_list.append(curr_direc)
             self.adr_bar.updateAddressBar(curr_direc)
-        elif os.path.isfile(curr_direc):
+        elif QFile(curr_direc).exists():
             # self.openFile(data)
             self.visited_directory_list.append(curr_direc)
-            self.toolbar_back_btn.setEnabled(True)
-            time.sleep(0.2)
+        self.toolbar_back_btn.setEnabled(True)
+        time.sleep(0.2)
 
     def goBack(self):
         if len(self.visited_directory_list) == 1:
@@ -912,18 +1061,19 @@ class TanzFileManger(QMainWindow):
     def showSearchWindow(self):
         search_window = SearchWindow(self)
         search_window.exec()
+
     def selectAllData(self):
         curr = self.core_sys_model.filePath(self.core_list_view.rootIndex())
         direc = QDir(curr)
         direc.setFilter(QDir.Filter.NoDotAndDotDot | QDir.Filter.Hidden | QDir.Filter.AllEntries)
-        self.file_paths = []  # create empty list to store file paths
+        self.file_paths = []  # create an empty list to store file paths
         for i in range(direc.count()):
             i_name = direc[i]
             i_path = os.path.join(curr, i_name)
-            i_info = QFileInfo(i_path)
+            # i_info = QFileInfo(i_path)
             item = self.core_list_view.model().index(i_path)
             self.core_list_view.selectionModel().select(item, QItemSelectionModel.SelectionFlag.Select)
-            self.file_paths.append(i_path)  # append file path to list
+            self.file_paths.append(i_path)  # append a file path to list
         QApplication.clipboard().setText('\n'.join(self.file_paths))  # copy file paths to clipboard
         self.paste_dir_act.setEnabled(True)  # enable paste action
 
@@ -936,6 +1086,7 @@ class TanzFileManger(QMainWindow):
             properties_window = PropertiesWindow(path)
             properties_window.setModal(True)
             properties_window.exec()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
